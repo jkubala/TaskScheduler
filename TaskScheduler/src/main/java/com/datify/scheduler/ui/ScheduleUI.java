@@ -14,6 +14,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Whole class made by Claude
+ */
 public class ScheduleUI extends JFrame {
     private static final String[] COLUMN_NAMES = {
             "Time", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
