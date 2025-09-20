@@ -1,16 +1,17 @@
 package com.datify.scheduler;
 
-import com.datify.scheduler.config.SchedulerConfig;
-import com.datify.scheduler.model.*;
+import com.datify.scheduler.model.State;
+import com.datify.scheduler.model.Task;
+import com.datify.scheduler.model.TimeSlot;
 import com.datify.scheduler.planner.SchedulePlanner;
+import com.datify.scheduler.util.*;
 import com.datify.scheduler.ui.ScheduleUI;
-
-import javax.swing.SwingUtilities;
+import lombok.extern.slf4j.Slf4j;
+import javax.swing.*;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalTime;
 import java.util.*;
-import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class Main {
@@ -18,6 +19,9 @@ public class Main {
         log.info("Scheduler starting...");
 
         Map<UUID, Task> validTaskIds = seedData();
+        if(validTaskIds.isEmpty()) {
+            return;
+        }
         log.info("Seeded {} tasks", validTaskIds.size());
         State startState = new State(
                 new ArrayList<>(),
@@ -101,7 +105,6 @@ public class Main {
         Task documentation = new Task.TaskBuilder("Documentation")
                 .description("Update project documentation")
                 .duration(Duration.ofMinutes(90))
-                .dependencyIds(Set.of(morningMeeting.getId()))
                 .idealTimeWindows(documentationIdealTW)
                 .build();
 
@@ -109,17 +112,21 @@ public class Main {
                 .description("Review pull requests")
                 .duration(Duration.ofHours(1))
                 .idealTimeWindows(codeReviewIdealTW)
-                .dependencyIds(Set.of(documentation.getId()))
                 .build();
 
-        log.debug("Created tasks: {}, {}, {}",
-                morningMeeting.getName(), documentation.getName(), codeReview.getName());
-        // TODO check for circular dependencies
+        documentation.getDependencyIds().add(codeReview.getId());
+
+        log.debug("Created tasks: {}, {}, {}", morningMeeting.getName(), documentation.getName(), codeReview.getName());
         Map<UUID, Task> validTaskIds = new HashMap<>();
         validTaskIds.put(morningMeeting.getId(), morningMeeting);
         validTaskIds.put(codeReview.getId(), codeReview);
         validTaskIds.put(documentation.getId(), documentation);
 
+        if(DependencyValidator.hasCircularDependencies(validTaskIds))
+        {
+            log.error("Circular dependencies detected!");
+            return Collections.emptyMap();
+        }
 
         return validTaskIds;
     }
