@@ -10,6 +10,7 @@ import com.datify.scheduler.model.TimeSlot;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
     protected final SchedulerConfig schedulerConfig;
@@ -66,13 +67,26 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
         newUnplaced.remove(task.getId());
 
         int newCost = current.costSoFar() + calculatePlacementCost(task, placement.timeSlot());
-        int totalCostEstimated = newCost + estimateRemainingCost(newUnplaced);
+        int totalCostEstimated = newCost + estimateRemainingCost(current, newUnplaced);
 
         return new State(newPlaced, newUnplaced, newCost, totalCostEstimated);
     }
 
-    protected int estimateRemainingCost(Map<UUID, Task> unplacedTasks) {
-        return unplacedTasks.size() * costConfig.taskPlacementCost();
+    protected int estimateRemainingCost(State currentState, Map<UUID, Task> unplacedTasks) {
+        int baseCost = unplacedTasks.size() * costConfig.taskPlacementCost();
+        int potentialPenalty = 0;
+
+        for (Task task : unplacedTasks.values()) {
+            if (!task.getIdealTimeWindows().isEmpty()) {
+                boolean hasAvailableIdeal = task.getIdealTimeWindows().stream()
+                        .anyMatch(ideal -> currentState.canPlaceTask(task, ideal));
+                if (!hasAvailableIdeal) {
+                    potentialPenalty += costConfig.idealTimeslotMissPenalty();
+                }
+            }
+        }
+
+        return baseCost + potentialPenalty;
     }
 
     @Override

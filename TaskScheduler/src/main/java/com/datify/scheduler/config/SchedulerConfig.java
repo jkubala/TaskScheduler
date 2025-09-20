@@ -26,11 +26,11 @@ public record SchedulerConfig(
         return new SchedulerConfig(
                 LocalTime.of(8, 0),
                 LocalTime.of(17, 0),
+                30,
                 10,
                 10,
-                10,
-                10000,
-                30000
+                10000000,
+                60000
         );
     }
 }

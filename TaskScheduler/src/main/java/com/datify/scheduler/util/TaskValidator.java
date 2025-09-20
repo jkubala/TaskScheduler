@@ -3,13 +3,14 @@ package com.datify.scheduler.util;
 import com.datify.scheduler.model.Task;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
-public class DependencyValidator {
+public class TaskValidator {
     public static boolean hasCircularDependencies(Map<UUID, Task> tasks) {
         Set<UUID> visiting = new HashSet<>();
         Set<UUID> visited = new HashSet<>();
@@ -50,6 +51,21 @@ public class DependencyValidator {
         visiting.remove(taskId);
         visited.add(taskId);
 
+        return false;
+    }
+
+    public static boolean hasInvalidIdealTimeWindows(Map<UUID, Task> tasks) {
+        for (Task task : tasks.values()) {
+            if (!task.getIdealTimeWindows().isEmpty()) {
+                boolean fitsInAny = task.getIdealTimeWindows().stream()
+                        .anyMatch(slot -> Duration.between(slot.start(), slot.end()).compareTo(task.getDuration()) >= 0);
+                if (!fitsInAny) {
+                    log.error("Task {} duration {} does not fit into any ideal time window: {}",
+                            task.getName(), task.getDuration(), task.getIdealTimeWindows());
+                    return true;
+                }
+            }
+        }
         return false;
     }
 }
