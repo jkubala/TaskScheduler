@@ -1,5 +1,6 @@
 package com.datify.scheduler;
 
+import com.datify.scheduler.config.SchedulerConfig;
 import com.datify.scheduler.model.*;
 import com.datify.scheduler.planner.SchedulePlanner;
 import com.datify.scheduler.ui.ScheduleUI;
@@ -9,11 +10,15 @@ import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalTime;
 import java.util.*;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class Main {
     public static void main(String[] args) {
-        Map<UUID, Task> validTaskIds = seedData();
+        log.info("Scheduler starting...");
 
+        Map<UUID, Task> validTaskIds = seedData();
+        log.info("Seeded {} tasks", validTaskIds.size());
         State startState = new State(
                 new ArrayList<>(),
                 new HashMap<>(validTaskIds),
@@ -26,29 +31,32 @@ public class Main {
         State bestStateFound = schedulePlanner.beginPlanning(startState);
 
         if (bestStateFound == null || bestStateFound.placedTasks().isEmpty()) {
-            System.out.println("No valid schedule found");
+            log.warn("No valid schedule found");
             return;
         } else {
-            System.out.println("Number of placed tasks: " + bestStateFound.placedTasks().size());
+            log.info("Successfully created schedule with {} tasks",
+                    bestStateFound.placedTasks().size());
         }
 
         // Display UI (made with Claude)
         SwingUtilities.invokeLater(() -> {
-            System.out.println("Creating UI on EDT...");
+            log.info("Creating UI on EDT...");
             try {
                 ScheduleUI ui = new ScheduleUI();
                 ui.setVisible(true);
-                System.out.println("UI window created and set visible");
+                log.info("UI window created and set visible");
                 ui.displaySchedule(bestStateFound);
-                System.out.println("Schedule data loaded into UI");
+                log.info("Schedule data loaded into UI");
             } catch (Exception e) {
-                System.err.println("Error creating UI: " + e.getMessage());
+                log.error("Error creating UI: " + e.getMessage());
                 e.printStackTrace();
             }
         });
     }
 
     private static Map<UUID, Task> seedData() {
+        log.debug("Creating seed data...");
+
         List<TimeSlot> morningMeetingIdealTW = new ArrayList<>();
         List<TimeSlot> codeReviewIdealTW = new ArrayList<>();
         List<TimeSlot> documentationIdealTW = new ArrayList<>();
@@ -104,11 +112,15 @@ public class Main {
                 .dependencyIds(Set.of(documentation.getId()))
                 .build();
 
+        log.debug("Created tasks: {}, {}, {}",
+                morningMeeting.getName(), documentation.getName(), codeReview.getName());
         // TODO check for circular dependencies
         Map<UUID, Task> validTaskIds = new HashMap<>();
         validTaskIds.put(morningMeeting.getId(), morningMeeting);
         validTaskIds.put(codeReview.getId(), codeReview);
         validTaskIds.put(documentation.getId(), documentation);
+
+
         return validTaskIds;
     }
 }

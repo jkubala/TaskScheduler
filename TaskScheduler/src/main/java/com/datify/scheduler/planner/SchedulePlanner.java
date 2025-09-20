@@ -1,30 +1,40 @@
 package com.datify.scheduler.planner;
 
+import com.datify.scheduler.config.SchedulerConfig;
 import com.datify.scheduler.model.Placement;
 import com.datify.scheduler.model.State;
 import com.datify.scheduler.model.Task;
 import com.datify.scheduler.model.TimeSlot;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.*;
 
+@Slf4j
 public class SchedulePlanner {
-    private static final LocalTime WORK_START = LocalTime.of(8, 0);
-    private static final LocalTime WORK_END = LocalTime.of(17, 0);
-    private static final int TIME_SLOT_MINUTES = 10;
-    private static final int TASK_PLACEMENT_COST = 10;
-    private static final int IDEAL_TIMESLOT_MISS_PENALTY = 10;
-    private static final int MAX_NODES = 10000;
-    private static final long MAX_TIME_MS = 30000;
+    private final SchedulerConfig config;
 
     private State bestSolution;
     private int bestCost = Integer.MAX_VALUE;
     private int nodesExplored = 0;
     private long startTime;
 
+    public SchedulePlanner() {
+        this(SchedulerConfig.defaultConfig());
+    }
+
+    public SchedulePlanner(SchedulerConfig config) {
+        this.config = config;
+    }
+
     public State beginPlanning(State startState) {
-        System.out.println("Starting planning with " + startState.unplacedTasks().size() + " unplaced tasks");
+        if (startState == null) {
+            throw new IllegalArgumentException("Start state cannot be null");
+        }
+
+        log.info("Starting planning with {} unplaced tasks", startState.unplacedTasks().size());
+        log.debug("Using config: work hours {}-{}, max nodes: {}", config.getWorkStart(), config.getWorkEnd(), config.getMaxNodes());
 
         bestSolution = null;
         bestCost = Integer.MAX_VALUE;
@@ -32,12 +42,12 @@ public class SchedulePlanner {
         startTime = System.currentTimeMillis();
 
         backtrackSearch(startState);
-
+        long elapsedTime = System.currentTimeMillis() - startTime;
         if (bestSolution != null) {
-            System.out.println("Found solution with cost: " + bestCost + " (explored " + nodesExplored + " nodes)");
+            log.info("Found solution with cost: {} (explored {} nodes in {}ms)", bestCost, nodesExplored, elapsedTime);
             return bestSolution;
         } else {
-            System.out.println("No valid solution found after exploring " + nodesExplored + " nodes");
+            log.warn("No valid solution found after exploring {} nodes in {}ms", nodesExplored, elapsedTime);
             return startState;
         }
     }
@@ -45,9 +55,17 @@ public class SchedulePlanner {
     private boolean backtrackSearch(State currentState) {
         nodesExplored++;
 
-        if (nodesExplored > MAX_NODES ||
-                (System.currentTimeMillis() - startTime) > MAX_TIME_MS) {
-            System.out.println("Search terminated due to limits");
+        if (log.isTraceEnabled() && nodesExplored % 1000 == 0) {
+            log.trace("Explored {} nodes, current cost: {}", nodesExplored, currentState.costSoFar());
+        }
+
+        if (nodesExplored > config.getMaxNodes()) {
+            log.warn("Search terminated: exceeded maximum nodes ({})", config.getMaxNodes());
+            return bestSolution != null;
+        }
+
+        if ((System.currentTimeMillis() - startTime) > config.getMaxTimeMs()) {
+            log.warn("Search terminated: exceeded time limit ({}ms)", config.getMaxTimeMs());
             return bestSolution != null;
         }
 
@@ -55,31 +73,45 @@ public class SchedulePlanner {
             if (currentState.costSoFar() < bestCost) {
                 bestSolution = currentState;
                 bestCost = currentState.costSoFar();
-                System.out.println("Found new best solution with cost: " + bestCost);
+                log.info("Found new best solution with cost: {} (was: {})", currentState.costSoFar(), bestCost);
                 return true;
             }
+            log.debug("Complete state found but not better (cost: {}, best: {})", currentState.costSoFar(), bestCost);
             return false;
         }
 
         if (currentState.totalCostEstimated() >= bestCost) {
+            log.trace("Pruning branch: estimated cost {} >= best cost {}", currentState.totalCostEstimated(), bestCost);
             return false;
         }
 
         Task taskToPlace = selectNextTask(currentState);
         if (taskToPlace == null) {
+            log.debug("No task available to place (dependencies not satisfied)");
             return false;
         }
+
+        log.debug("Selected task to place: {} (duration: {})", taskToPlace.getName(), taskToPlace.getDuration());
 
         List<Placement> possiblePlacements = generatePossiblePlacements(taskToPlace, currentState);
         possiblePlacements.sort(Comparator.comparingInt(Placement::costSoFar));
 
+        log.debug("Generated {} possible placements for task {}", possiblePlacements.size(), taskToPlace.getName());
+
         boolean foundAnySolution = false;
         for (Placement placement : possiblePlacements) {
+            log.trace("Trying placement: {} on {} from {} to {}",
+                    taskToPlace.getName(),
+                    placement.timeSlot().dayOfWeek(),
+                    placement.timeSlot().start(),
+                    placement.timeSlot().end());
             State newState = createStateWithPlacement(currentState, taskToPlace, placement);
             if (newState != null) {
                 if (backtrackSearch(newState)) {
                     foundAnySolution = true;
                 }
+            } else {
+                log.trace("Failed to create valid state for placement");
             }
         }
 
@@ -92,14 +124,21 @@ public class SchedulePlanner {
 
         for (Task task : currentState.unplacedTasks().values()) {
              if (!areDependenciesSatisfied(task, currentState)) {
-                continue;
+                 log.trace("Task {} skipped due to unsatisfied dependencies", task.getName());
+                 continue;
             }
 
             int possibleSlots = generatePossiblePlacements(task, currentState).size();
+            log.trace("Task {} has {} possible placement slots", task.getName(), possibleSlots);
             if (possibleSlots < minPossibleSlots && possibleSlots > 0) {
                 minPossibleSlots = possibleSlots;
                 mostConstrained = task;
             }
+        }
+
+        if (mostConstrained != null) {
+            log.debug("Most constrained task selected: {} ({} possible slots)",
+                    mostConstrained.getName(), minPossibleSlots);
         }
 
         return mostConstrained;
@@ -114,10 +153,10 @@ public class SchedulePlanner {
         List<Placement> placements = new ArrayList<>();
 
         for (DayOfWeek day : DayOfWeek.values()) {
-            LocalTime currentSlot = WORK_START;
+            LocalTime currentSlot = config.getWorkStart();
             while (true) {
                 LocalTime endSlot = currentSlot.plus(task.getDuration());
-                if (endSlot.isAfter(WORK_END)) {
+                if (endSlot.isAfter(config.getWorkEnd())) {
                     break;
                 }
                 TimeSlot timeSlot = new TimeSlot(currentSlot, endSlot, day);
@@ -130,7 +169,7 @@ public class SchedulePlanner {
                     );
                     placements.add(candidatePlacement);
                 }
-                currentSlot = currentSlot.plusMinutes(TIME_SLOT_MINUTES);
+                currentSlot = currentSlot.plusMinutes(config.getTimeSlotMinutes());
             }
         }
 
@@ -138,13 +177,14 @@ public class SchedulePlanner {
     }
 
     private int calculatePlacementCost(Task task, TimeSlot timeWindow, DayOfWeek day) {
-        int cost = TASK_PLACEMENT_COST;
+        int cost = config.getTaskPlacementCost();
 
         if (!task.getIdealTimeWindows().isEmpty()) {
             boolean inIdealWindow = task.getIdealTimeWindows().stream()
                     .anyMatch(idealWindow -> idealWindow.envelops(timeWindow));
             if (!inIdealWindow) {
-                cost += IDEAL_TIMESLOT_MISS_PENALTY;
+                cost += config.getIdealTimeslotMissPenalty();
+                log.trace("Task {} placed outside ideal window, adding penalty", task.getName());
             }
         }
 
@@ -173,12 +213,12 @@ public class SchedulePlanner {
                     newTotalEstimated
             );
         } catch (Exception e) {
-            System.err.println("Error creating state: " + e.getMessage());
+            log.error("Error creating state with placement for task {}: {}", task.getName(), e.getMessage(), e);
             return null;
         }
     }
 
     private int estimateRemainingCost(Map<UUID, Task> unplacedTasks) {
-        return unplacedTasks.size() * TASK_PLACEMENT_COST;
+        return unplacedTasks.size() * config.getTaskPlacementCost();
     }
 }

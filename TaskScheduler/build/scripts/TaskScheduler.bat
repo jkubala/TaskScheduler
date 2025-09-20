@@ -70,7 +70,7 @@ goto fail
 :execute
 @rem Setup the command line
 
-set CLASSPATH=%APP_HOME%\lib\TaskScheduler-1.0-SNAPSHOT.jar
+set CLASSPATH=%APP_HOME%\lib\TaskScheduler-1.0-SNAPSHOT.jar;%APP_HOME%\lib\logback-classic-1.4.11.jar;%APP_HOME%\lib\slf4j-api-2.0.9.jar;%APP_HOME%\lib\logback-core-1.4.11.jar
 
 
 @rem Execute TaskScheduler
