@@ -114,8 +114,6 @@ public class Main {
                 .idealTimeWindows(codeReviewIdealTW)
                 .build();
 
-        documentation.getDependencyIds().add(codeReview.getId());
-
         log.debug("Created tasks: {}, {}, {}", morningMeeting.getName(), documentation.getName(), codeReview.getName());
         Map<UUID, Task> validTaskIds = new HashMap<>();
         validTaskIds.put(morningMeeting.getId(), morningMeeting);
