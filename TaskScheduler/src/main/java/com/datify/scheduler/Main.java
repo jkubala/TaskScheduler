@@ -18,15 +18,14 @@ public class Main {
     public static void main(String[] args) {
         log.info("Scheduler starting...");
 
-        Map<UUID, Task> validTaskIds = seedData();
-        if(validTaskIds.isEmpty()) {
+        Map<UUID, Task> validTasks = seedData();
+        if(validTasks.isEmpty()) {
             return;
         }
-        log.info("Seeded {} tasks", validTaskIds.size());
+        log.info("Seeded {} tasks", validTasks.size());
         State startState = new State(
-                new ArrayList<>(),
-                new HashMap<>(validTaskIds),
-                validTaskIds,
+                new HashMap<>(),
+                new HashMap<>(validTasks),
                 0,
                 0
         );
@@ -106,6 +105,7 @@ public class Main {
                 .description("Update project documentation")
                 .duration(Duration.ofMinutes(90))
                 .idealTimeWindows(documentationIdealTW)
+                .dependencyIds(Set.of(morningMeeting.getId()))
                 .build();
 
         Task codeReview = new Task.TaskBuilder("Code Review")

@@ -24,4 +24,10 @@ public record TimeSlot(LocalTime start, LocalTime end, DayOfWeek dayOfWeek) {
                 && (other.start.equals(this.start) || other.start.isAfter(this.start))
                 && (other.end.equals(this.end) || other.end.isBefore(this.end));
     }
+
+    public boolean startsAtOrAfter(TimeSlot other) {
+        if (this.dayOfWeek.getValue() > other.dayOfWeek.getValue()) return true;
+        if (this.dayOfWeek.getValue() < other.dayOfWeek.getValue()) return false;
+        return this.start.isAfter(other.end) || this.start.equals(other.end);
+    }
 }

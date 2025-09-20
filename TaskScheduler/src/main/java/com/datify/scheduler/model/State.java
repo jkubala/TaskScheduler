@@ -1,34 +1,40 @@
 package com.datify.scheduler.model;
 
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public record State(List<Placement> placedTasks, Map<UUID, Task> unplacedTasks, Map<UUID, Task> validTaskIds,
-                    int costSoFar, int totalCostEstimated) {
-    public State(List<Placement> placedTasks,
-                 Map<UUID, Task> unplacedTasks,
-                 Map<UUID, Task> validTaskIds,
-                 int costSoFar,
-                 int totalCostEstimated) {
-        this.placedTasks = List.copyOf(placedTasks);
-        this.unplacedTasks = new HashMap<>(unplacedTasks);
-        this.validTaskIds = new HashMap<>(validTaskIds);
-        this.costSoFar = costSoFar;
-        this.totalCostEstimated = totalCostEstimated;
-    }
+public record State(
+        Map<UUID, Placement> placedTasks,
+        Map<UUID, Task> unplacedTasks,
+        int costSoFar,
+        int totalCostEstimated
+) {
 
     public boolean isComplete() {
         return unplacedTasks.isEmpty();
     }
 
-    public boolean hasSpaceForTaskIn(TimeSlot timeSlot) {
-        for (Placement placedTask : placedTasks) {
-            if (placedTask.timeSlot().intersectsWith(timeSlot)) {
+    public boolean dependenciesPlaced(Task task) {
+        return task.getDependencyIds().stream()
+                .allMatch(placedTasks::containsKey);
+    }
+
+    public boolean canPlaceTask(Task task, TimeSlot candidateSlot) {
+        return hasSpaceForTaskIn(candidateSlot) && isAfterDependencies(task, candidateSlot);
+    }
+
+    private boolean isAfterDependencies(Task task, TimeSlot candidateSlot) {
+        for (UUID depId : task.getDependencyIds()) {
+            Placement depPlacement = placedTasks.get(depId);
+            if (depPlacement != null && depPlacement.timeSlot().startsAtOrAfter(candidateSlot)) {
                 return false;
             }
         }
         return true;
+    }
+
+    private boolean hasSpaceForTaskIn(TimeSlot timeSlot) {
+        return placedTasks.values().stream()
+                .noneMatch(p -> p.timeSlot().intersectsWith(timeSlot));
     }
 }

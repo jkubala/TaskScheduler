@@ -20,29 +20,29 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
         this.costConfig = costConfig;
     }
 
-    protected boolean areDependenciesSatisfied(Task task, State state) {
-        // TODO
-        return true;
-    }
-
     protected List<Placement> generatePlacements(Task task, State state) {
         List<Placement> placements = new ArrayList<>();
-        for (DayOfWeek day : DayOfWeek.values()) {
+
+        if (!state.dependenciesPlaced(task)) {
+            return Collections.emptyList();
+        }
+
+        for (var day : DayOfWeek.values()) {
             LocalTime slot = schedulerConfig.workStart();
             while (true) {
                 LocalTime end = slot.plus(task.getDuration());
-                if (end.isAfter(schedulerConfig.workEnd())) {
-                    break;
-                }
+                if (end.isAfter(schedulerConfig.workEnd())) break;
 
                 TimeSlot ts = new TimeSlot(slot, end, day);
-                if (state.hasSpaceForTaskIn(ts)) {
-                    int cost = calculatePlacementCost(task, ts);
-                    placements.add(new Placement(task.getId(), ts, cost));
+
+                if (state.canPlaceTask(task, ts)) {
+                    placements.add(new Placement(task, ts));
                 }
+
                 slot = slot.plusMinutes(schedulerConfig.timeSlotMinutes());
             }
         }
+
         return placements;
     }
 
@@ -59,16 +59,16 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
     }
 
     protected State createStateWithPlacement(State current, Task task, Placement placement) {
-        List<Placement> newPlaced = new ArrayList<>(current.placedTasks());
-        newPlaced.add(placement);
+        Map<UUID, Placement> newPlaced = new HashMap<>(current.placedTasks());
+        newPlaced.put(task.getId(), placement);
 
         Map<UUID, Task> newUnplaced = new HashMap<>(current.unplacedTasks());
         newUnplaced.remove(task.getId());
 
-        int newCost = current.costSoFar() + placement.costSoFar();
-        int estimatedRemaining = estimateRemainingCost(newUnplaced);
+        int newCost = current.costSoFar() + calculatePlacementCost(task, placement.timeSlot());
+        int totalCostEstimated = newCost + estimateRemainingCost(newUnplaced);
 
-        return new State(newPlaced, newUnplaced, current.validTaskIds(), newCost, newCost + estimatedRemaining);
+        return new State(newPlaced, newUnplaced, newCost, totalCostEstimated);
     }
 
     protected int estimateRemainingCost(Map<UUID, Task> unplacedTasks) {
@@ -77,4 +77,9 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
 
     @Override
     public abstract State findSchedule(State startState);
+
+    protected boolean limitReached(int nodesExplored, long startTime) {
+        return nodesExplored > schedulerConfig.maxNodes() ||
+                System.currentTimeMillis() - startTime > schedulerConfig.maxTimeMs();
+    }
 }

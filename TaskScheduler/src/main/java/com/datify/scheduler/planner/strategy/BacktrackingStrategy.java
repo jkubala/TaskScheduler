@@ -48,7 +48,7 @@ public class BacktrackingStrategy extends AbstractPlanningStrategy {
     private boolean backtrackSearch(State currentState) {
         nodesExplored++;
 
-        if (nodesExplored > schedulerConfig.maxNodes() || System.currentTimeMillis() - startTime > schedulerConfig.maxTimeMs()) {
+        if (limitReached(nodesExplored, startTime)) {
             return bestSolution != null;
         }
 
@@ -73,7 +73,7 @@ public class BacktrackingStrategy extends AbstractPlanningStrategy {
         }
 
         List<Placement> placements = generatePlacements(taskToPlace, currentState);
-        placements.sort(Comparator.comparingInt(Placement::costSoFar));
+        placements.sort(Comparator.comparingInt(p -> calculatePlacementCost(taskToPlace, p.timeSlot())));
 
         boolean foundAnySolution = false;
         for (Placement placement : placements) {
@@ -91,8 +91,6 @@ public class BacktrackingStrategy extends AbstractPlanningStrategy {
         int minSlots = Integer.MAX_VALUE;
 
         for (Task task : state.unplacedTasks().values()) {
-            if (!areDependenciesSatisfied(task, state)) continue;
-
             int slots = generatePlacements(task, state).size();
             if (slots < minSlots && slots > 0) {
                 minSlots = slots;

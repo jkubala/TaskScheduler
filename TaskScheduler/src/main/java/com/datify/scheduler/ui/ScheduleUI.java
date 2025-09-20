@@ -11,13 +11,9 @@ import java.awt.*;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * This whole class was made by Claude, since I did not have time to study ways to implement Java GUI
- */
 public class ScheduleUI extends JFrame {
     private static final String[] COLUMN_NAMES = {
             "Time", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
@@ -36,11 +32,9 @@ public class ScheduleUI extends JFrame {
     private JTable scheduleTable;
     private DefaultTableModel tableModel;
     private Map<UUID, Color> taskColors;
-    private Map<UUID, Task> allTasks;
 
     public ScheduleUI() {
         this.taskColors = new HashMap<>();
-        this.allTasks = new HashMap<>();
         initializeUI();
     }
 
@@ -71,7 +65,6 @@ public class ScheduleUI extends JFrame {
         scheduleTable = new JTable(tableModel);
         scheduleTable.setRowHeight(25);
         scheduleTable.setGridColor(Color.LIGHT_GRAY);
-
         scheduleTable.setDefaultRenderer(Object.class, new TaskCellRenderer());
 
         scheduleTable.getColumnModel().getColumn(0).setPreferredWidth(80);
@@ -99,32 +92,28 @@ public class ScheduleUI extends JFrame {
 
     public void displaySchedule(State state) {
         clearSchedule();
+        assignTaskColors(state.placedTasks().values());
 
-        allTasks.putAll(state.validTaskIds());
-
-        assignTaskColors(state.placedTasks());
-
-        for (Placement placement : state.placedTasks()) {
-            placTaskInSchedule(placement);
+        for (Placement placement : state.placedTasks().values()) {
+            placeTaskInSchedule(placement);
         }
 
         scheduleTable.repaint();
     }
 
-    private void assignTaskColors(List<Placement> placements) {
+    private void assignTaskColors(Iterable<Placement> placements) {
         int colorIndex = 0;
         for (Placement placement : placements) {
-            if (!taskColors.containsKey(placement.taskId())) {
-                taskColors.put(placement.taskId(), TASK_COLORS[colorIndex % TASK_COLORS.length]);
+            UUID id = placement.task().getId();
+            if (!taskColors.containsKey(id)) {
+                taskColors.put(id, TASK_COLORS[colorIndex % TASK_COLORS.length]);
                 colorIndex++;
             }
         }
     }
 
-    private void placTaskInSchedule(Placement placement) {
-        Task task = allTasks.get(placement.taskId());
-        if (task == null) return;
-
+    private void placeTaskInSchedule(Placement placement) {
+        Task task = placement.task();
         int dayColumn = getDayColumn(placement.timeSlot().dayOfWeek());
         if (dayColumn == -1) return;
 
@@ -136,39 +125,21 @@ public class ScheduleUI extends JFrame {
 
         if (startRow == -1 || endRow == -1) return;
 
-        String taskInfo = task.getName();
-        if (task.getDescription() != null && !task.getDescription().isEmpty()) {
-            taskInfo += " (" + task.getDescription() + ")";
-        }
-
         for (int row = startRow; row < endRow; row++) {
-            if (row == startRow) {
-                tableModel.setValueAt(taskInfo, row, dayColumn);
-            } else {
-                tableModel.setValueAt("↳ " + task.getName(), row, dayColumn);
-            }
+            tableModel.setValueAt(placement, row, dayColumn);
         }
     }
 
     private int getDayColumn(DayOfWeek dayOfWeek) {
-        switch (dayOfWeek) {
-            case MONDAY:
-                return 1;
-            case TUESDAY:
-                return 2;
-            case WEDNESDAY:
-                return 3;
-            case THURSDAY:
-                return 4;
-            case FRIDAY:
-                return 5;
-            case SATURDAY:
-                return 6;
-            case SUNDAY:
-                return 7;
-            default:
-                return -1;
-        }
+        return switch (dayOfWeek) {
+            case MONDAY -> 1;
+            case TUESDAY -> 2;
+            case WEDNESDAY -> 3;
+            case THURSDAY -> 4;
+            case FRIDAY -> 5;
+            case SATURDAY -> 6;
+            case SUNDAY -> 7;
+        };
     }
 
     private int getRowForTime(LocalTime time) {
@@ -202,41 +173,27 @@ public class ScheduleUI extends JFrame {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value,
                                                        boolean isSelected, boolean hasFocus, int row, int column) {
-
             Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
             if (column == 0) {
+                // Time column
                 component.setBackground(Color.WHITE);
                 component.setForeground(Color.BLACK);
                 setHorizontalAlignment(SwingConstants.CENTER);
-            } else if (value != null && !value.toString().isEmpty()) {
-                String cellText = value.toString();
-                UUID taskId = findTaskIdFromText(cellText);
-
-                if (taskId != null && taskColors.containsKey(taskId)) {
-                    component.setBackground(taskColors.get(taskId));
-                    component.setForeground(Color.BLACK);
-                } else {
-                    component.setBackground(Color.LIGHT_GRAY);
-                    component.setForeground(Color.BLACK);
-                }
+            } else if (value instanceof Placement placement) {
+                UUID id = placement.task().getId();
+                component.setBackground(taskColors.getOrDefault(id, Color.LIGHT_GRAY));
+                component.setForeground(Color.BLACK);
+                setText(placement.task().getName());
                 setHorizontalAlignment(SwingConstants.LEFT);
             } else {
                 component.setBackground(Color.WHITE);
                 component.setForeground(Color.BLACK);
+                setText("");
             }
 
             setBorder(BorderFactory.createLineBorder(Color.GRAY));
             return component;
-        }
-
-        private UUID findTaskIdFromText(String cellText) {
-            for (Map.Entry<UUID, Task> entry : allTasks.entrySet()) {
-                if (cellText.contains(entry.getValue().getName())) {
-                    return entry.getKey();
-                }
-            }
-            return null;
         }
     }
 }

@@ -40,17 +40,12 @@ public class AStarStrategy extends AbstractPlanningStrategy {
                 continue;
             }
 
-            if (nodesExplored > schedulerConfig.maxNodes() ||
-                    System.currentTimeMillis() - startTime > schedulerConfig.maxTimeMs()) {
+            if (limitReached(nodesExplored, startTime)) {
                 log.warn("A* search stopped: node or time limit reached");
                 break;
             }
 
             for (Task task : current.unplacedTasks().values()) {
-                if (!areDependenciesSatisfied(task, current)) {
-                    continue;
-                }
-
                 for (Placement placement : generatePlacements(task, current)) {
                     State next = createStateWithPlacement(current, task, placement);
                     frontier.add(next);
