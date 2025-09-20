@@ -4,10 +4,8 @@ import com.datify.scheduler.model.ExtractedTask;
 import com.datify.scheduler.model.Task;
 import com.datify.scheduler.model.TimeSlot;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.theokanning.openai.completion.chat.ChatCompletionRequest;
-import com.theokanning.openai.completion.chat.ChatMessage;
-import com.theokanning.openai.completion.chat.ChatMessageRole;
-import com.theokanning.openai.service.OpenAiService;
+import com.google.genai.Client;
+import com.google.genai.types.GenerateContentResponse;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalTime;
@@ -21,18 +19,19 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class LLMTaskSeeder {
-    private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
+    private static final String GEMINI_API_KEY = System.getenv("GOOGLE_API_KEY");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final int MAX_RETRIES = 3;
-    private static final long INITIAL_BACKOFF_SECONDS = 10; // Start with 10 seconds
+    private static final long INITIAL_BACKOFF_SECONDS = 5;
 
     public static Map<UUID, Task> seedFromLLM(String inputText) {
-        if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
-            log.error("OPENAI_API_KEY environment variable not set. Falling back to hardcoded tasks.");
+        if (GEMINI_API_KEY == null || GEMINI_API_KEY.isBlank()) {
+            log.error("GOOGLE_API_KEY environment variable not set. Falling back to hardcoded tasks.");
             return seedHardcodedTasks();
         }
 
-        OpenAiService service = new OpenAiService(OPENAI_API_KEY);
+        Client client = new Client();
+
         String prompt = """
                 Extract all tasks from this description. For each task, create a structured JSON array entry with:
                 - name: Task name (string)
@@ -48,20 +47,21 @@ public class LLMTaskSeeder {
                 Description: %s
                 """.formatted(inputText);
 
-        ChatCompletionRequest request = ChatCompletionRequest.builder()
-                .model("gpt-4o-mini")
-                .messages(List.of(new ChatMessage(ChatMessageRole.USER.value(), prompt)))
-                .temperature(0.1)
-                .maxTokens(1000)
-                .build();
-
         int retries = 0;
         while (retries < MAX_RETRIES) {
             try {
-                String response = service.createChatCompletion(request).getChoices().get(0).getMessage().getContent();
-                log.info("LLM Response: {}", response);
+                GenerateContentResponse response = client.models.generateContent("gemini-1.5-flash", prompt, null);
+                String content = response.text();
+                log.info("Gemini Response: {}", content);
 
-                ExtractedTask[] extractedTasks = OBJECT_MAPPER.readValue(response, ExtractedTask[].class);
+                // Clean up any unwanted formatting
+                content = content.trim();
+                if (content.startsWith("```json") && content.endsWith("```")) {
+                    content = content.substring(7, content.length() - 3).trim();
+                }
+
+                ExtractedTask[] extractedTasks = OBJECT_MAPPER.readValue(content, ExtractedTask[].class);
+
                 Map<UUID, Task> tasks = new HashMap<>();
                 Map<String, UUID> nameToId = new HashMap<>();
 
@@ -95,13 +95,13 @@ public class LLMTaskSeeder {
                     nameToId.put(et.name(), id);
                 }
 
-                log.info("Seeded {} tasks from LLM", tasks.size());
+                log.info("Seeded {} tasks from Gemini", tasks.size());
                 return tasks;
 
             } catch (Exception e) {
-                if (e.getMessage().contains("429") && retries < MAX_RETRIES - 1) {
-                    long backoffSeconds = INITIAL_BACKOFF_SECONDS * (1 << retries); // Exponential backoff
-                    log.warn("Rate limit hit (429). Retrying in {} seconds... (Attempt {}/{})", backoffSeconds, retries + 1, MAX_RETRIES);
+                if ((e.getMessage().contains("429") || e.getMessage().contains("quotaExceeded")) && retries < MAX_RETRIES - 1) {
+                    long backoffSeconds = INITIAL_BACKOFF_SECONDS * (1 << retries);
+                    log.warn("Rate limit/quota hit. Retrying in {} seconds... (Attempt {}/{})", backoffSeconds, retries + 1, MAX_RETRIES);
                     try {
                         TimeUnit.SECONDS.sleep(backoffSeconds);
                     } catch (InterruptedException ie) {
@@ -110,13 +110,13 @@ public class LLMTaskSeeder {
                     }
                     retries++;
                 } else {
-                    log.error("Failed to seed from LLM after {} retries: {}", retries, e.getMessage(), e);
+                    log.error("Failed to seed from Gemini after {} retries: {}", retries, e.getMessage(), e);
                     return seedHardcodedTasks();
                 }
             }
         }
 
-        log.error("Max retries reached for LLM seeding. Falling back to hardcoded tasks.");
+        log.error("Max retries reached for Gemini seeding. Falling back to hardcoded tasks.");
         return seedHardcodedTasks();
     }
 
