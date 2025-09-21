@@ -11,7 +11,7 @@ The main goals of this project are:
 - Provide a **basic user-friendly GUI** to display schedules and allow recomputation.
 - Illustrate a simple architectural design with **strategy patterns** (Backtracking and A*).
 
-> **Motivation:** This project was chosen because it naturally provides a set of tasks described in text, which seemed well-suited for experimentation with LLM-based extraction. At the same time, due to the known risks of hallucination or errors from LLMs, a **hardcoded fallback dataset** ensures reliable testing and reproducibility.
+> **Motivation:** This project was chosen because I wanted to avoid a CRUD app and because it naturally provides a set of tasks described in text, which seemed well-suited for experimentation with LLM-based extraction. At the same time, due to the known risks of hallucination or errors from LLMs, a **hardcoded fallback dataset** ensures reliable testing and reproducibility.
 
 ---
 
