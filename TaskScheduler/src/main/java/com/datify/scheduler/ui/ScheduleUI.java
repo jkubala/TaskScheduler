@@ -5,6 +5,7 @@ import com.datify.scheduler.config.SchedulerConfig;
 import com.datify.scheduler.model.Placement;
 import com.datify.scheduler.model.ScheduleState;
 import com.datify.scheduler.model.Task;
+import com.datify.scheduler.parser.LLMTaskSeeder;
 import com.datify.scheduler.planner.SchedulePlanner;
 import com.datify.scheduler.planner.strategy.AStarStrategy;
 import com.datify.scheduler.planner.strategy.BacktrackingStrategy;
@@ -23,9 +24,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Whole class made by Claude
- */
 @Slf4j
 public class ScheduleUI extends JFrame {
     private static final String[] COLUMN_NAMES = {
@@ -42,20 +40,21 @@ public class ScheduleUI extends JFrame {
             new Color(175, 238, 238)
     };
 
-    // Strategy selection options
     private static final String BACKTRACKING_STRATEGY = "Backtracking";
     private static final String ASTAR_STRATEGY = "A*";
+
+    private static final String SOURCE_GEMINI = "Gemini API";
+    private static final String SOURCE_HARDCODED = "Hardcoded";
 
     private JTable scheduleTable;
     private DefaultTableModel tableModel;
     private final Map<UUID, Color> taskColors;
 
-    // New components for strategy selection
     private JComboBox<String> strategyComboBox;
+    private JComboBox<String> taskSourceComboBox;
     private JButton recomputeButton;
     private JLabel statusLabel;
 
-    // Store initial state and tasks for recomputation
     private ScheduleState initialScheduleState;
     private Map<UUID, Task> originalTasks;
 
@@ -65,8 +64,10 @@ public class ScheduleUI extends JFrame {
     }
 
     public static void main(String[] args) {
-        ScheduleUI ui = new ScheduleUI();
-        ui.setVisible(true);
+        SwingUtilities.invokeLater(() -> {
+            ScheduleUI ui = new ScheduleUI();
+            ui.setVisible(true);
+        });
     }
 
     private void initializeUI() {
@@ -101,11 +102,10 @@ public class ScheduleUI extends JFrame {
         JScrollPane scrollPane = new JScrollPane(scheduleTable);
         add(scrollPane, BorderLayout.CENTER);
 
-        // Create control panel with strategy selection
         JPanel controlPanel = createControlPanel();
         add(controlPanel, BorderLayout.SOUTH);
 
-        setSize(900, 650); // Slightly taller to accommodate new controls
+        setSize(900, 700); // Slightly taller to fit new dropdown
         setLocationRelativeTo(null);
     }
 
@@ -114,17 +114,16 @@ public class ScheduleUI extends JFrame {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 5, 5, 5);
 
-        // Strategy selection row
+        // Strategy selection
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.WEST;
-        JLabel strategyLabel = new JLabel("Planning Strategy:");
-        controlPanel.add(strategyLabel, gbc);
+        controlPanel.add(new JLabel("Planning Strategy:"), gbc);
 
         gbc.gridx = 1;
         strategyComboBox = new JComboBox<>(new String[]{BACKTRACKING_STRATEGY, ASTAR_STRATEGY});
-        strategyComboBox.setSelectedItem(BACKTRACKING_STRATEGY); // Default to backtracking
-        strategyComboBox.setToolTipText("Select the planning algorithm to use");
+        strategyComboBox.setSelectedItem(BACKTRACKING_STRATEGY);
+        strategyComboBox.setToolTipText("Select planning algorithm");
         controlPanel.add(strategyComboBox, gbc);
 
         // Recompute button
@@ -132,7 +131,7 @@ public class ScheduleUI extends JFrame {
         recomputeButton = new JButton("Recompute Schedule");
         recomputeButton.setToolTipText("Recalculate schedule using selected strategy");
         recomputeButton.addActionListener(new RecomputeActionListener());
-        recomputeButton.setEnabled(false); // Initially disabled until we have data
+        recomputeButton.setEnabled(false);
         controlPanel.add(recomputeButton, gbc);
 
         // Status label
@@ -143,7 +142,7 @@ public class ScheduleUI extends JFrame {
         statusLabel.setForeground(Color.BLUE);
         controlPanel.add(statusLabel, gbc);
 
-        // Second row with existing buttons
+        // Refresh and Clear buttons
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.weightx = 0;
@@ -157,6 +156,17 @@ public class ScheduleUI extends JFrame {
         clearButton.addActionListener(e -> clearSchedule());
         controlPanel.add(clearButton, gbc);
 
+        // Task source selection
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        controlPanel.add(new JLabel("Task Source:"), gbc);
+
+        gbc.gridx = 1;
+        taskSourceComboBox = new JComboBox<>(new String[]{SOURCE_GEMINI, SOURCE_HARDCODED});
+        taskSourceComboBox.setSelectedItem(SOURCE_GEMINI);
+        taskSourceComboBox.setToolTipText("Select task source");
+        controlPanel.add(taskSourceComboBox, gbc);
+
         return controlPanel;
     }
 
@@ -169,15 +179,10 @@ public class ScheduleUI extends JFrame {
         }
 
         scheduleTable.repaint();
-
-        // Update status
         statusLabel.setText(String.format("Schedule loaded: %d tasks placed",
                 scheduleState.placedTasks().size()));
     }
 
-    /**
-     * Set the initial state and tasks to enable recomputation
-     */
     public void setInitialData(ScheduleState initialScheduleState, Map<UUID, Task> originalTasks) {
         this.initialScheduleState = initialScheduleState;
         this.originalTasks = new HashMap<>(originalTasks);
@@ -205,7 +210,6 @@ public class ScheduleUI extends JFrame {
 
         int startRow = getRowForTime(startTime);
         int endRow = getRowForTime(endTime);
-
         if (startRow == -1 || endRow == -1) return;
 
         for (int row = startRow; row < endRow; row++) {
@@ -228,15 +232,10 @@ public class ScheduleUI extends JFrame {
     private int getRowForTime(LocalTime time) {
         int hour = time.getHour();
         int minute = time.getMinute();
-
         if (hour < 8 || hour > 20) return -1;
-
         int baseRow = (hour - 8) * 2;
         if (minute >= 30) baseRow++;
-
-        if (baseRow >= tableModel.getRowCount()) return tableModel.getRowCount() - 1;
-
-        return baseRow;
+        return Math.min(baseRow, tableModel.getRowCount() - 1);
     }
 
     private void clearSchedule() {
@@ -252,25 +251,20 @@ public class ScheduleUI extends JFrame {
         scheduleTable.repaint();
     }
 
-    /**
-     * Action listener for the recompute button
-     */
     private class RecomputeActionListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
-            if (initialScheduleState == null || originalTasks == null) {
+            if (originalTasks == null) {
                 JOptionPane.showMessageDialog(ScheduleUI.this,
                         "No initial data available for recomputation.",
                         "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            // Show progress and disable button
             recomputeButton.setEnabled(false);
             statusLabel.setText("Computing schedule...");
             statusLabel.setForeground(Color.ORANGE);
 
-            // Create worker thread to avoid blocking UI
             SwingWorker<ScheduleState, Void> worker = new SwingWorker<>() {
                 @Override
                 protected ScheduleState doInBackground() {
@@ -279,16 +273,26 @@ public class ScheduleUI extends JFrame {
 
                     SchedulePlanner planner = new SchedulePlanner(strategy);
 
-                    // Create fresh initial state
-                    ScheduleState freshInitialState = new ScheduleState(
+                    // Task source selection
+                    String source = (String) taskSourceComboBox.getSelectedItem();
+                    Map<UUID, Task> tasks;
+                    if (SOURCE_HARDCODED.equals(source)) {
+                        tasks = LLMTaskSeeder.seedHardcodedTasks();
+                    } else {
+                        String input = """
+                            I need a 30-minute morning meeting at 8 AM on Monday or Tuesday.
+                            After that, a 60-minute documentation task ideally between 9 AM and 10 AM on Tuesday.
+                            Schedule a 90-minute code review at 10 AM on Wednesday.
+                            """;
+                        tasks = LLMTaskSeeder.seedFromLLM(input);
+                    }
+
+                    return planner.beginPlanning(new ScheduleState(
                             new HashMap<>(),
-                            new HashMap<>(originalTasks),
+                            new HashMap<>(tasks),
                             0,
                             0
-                    );
-
-                    log.info("Starting recomputation with {} strategy", selectedStrategy);
-                    return planner.beginPlanning(freshInitialState);
+                    ));
                 }
 
                 @Override
@@ -297,15 +301,12 @@ public class ScheduleUI extends JFrame {
                         ScheduleState result = get();
                         if (result != null && !result.placedTasks().isEmpty()) {
                             displaySchedule(result);
-                            statusLabel.setText(String.format("Recomputed with %s: %d tasks placed",
-                                    strategyComboBox.getSelectedItem(),
-                                    result.placedTasks().size()));
+                            statusLabel.setText(String.format("Recomputed with %s strategy: %d tasks placed",
+                                    strategyComboBox.getSelectedItem(), result.placedTasks().size()));
                             statusLabel.setForeground(Color.BLUE);
-                            log.info("Recomputation successful: {} tasks placed", result.placedTasks().size());
                         } else {
                             statusLabel.setText("Recomputation failed - no valid schedule found");
                             statusLabel.setForeground(Color.RED);
-                            log.warn("Recomputation failed");
                         }
                     } catch (Exception ex) {
                         statusLabel.setText("Error during recomputation: " + ex.getMessage());
@@ -316,7 +317,6 @@ public class ScheduleUI extends JFrame {
                     }
                 }
             };
-
             worker.execute();
         }
 
@@ -325,18 +325,9 @@ public class ScheduleUI extends JFrame {
             CostConfig costConfig = CostConfig.defaultConfig();
 
             return switch (strategyName) {
-                case ASTAR_STRATEGY -> {
-                    log.info("Creating A* strategy");
-                    yield new AStarStrategy(schedulerConfig, costConfig);
-                }
-                case BACKTRACKING_STRATEGY -> {
-                    log.info("Creating Backtracking strategy");
-                    yield new BacktrackingStrategy(schedulerConfig, costConfig);
-                }
-                default -> {
-                    log.warn("Unknown strategy: {}, defaulting to Backtracking", strategyName);
-                    yield new BacktrackingStrategy(schedulerConfig, costConfig);
-                }
+                case ASTAR_STRATEGY -> new AStarStrategy(schedulerConfig, costConfig);
+                case BACKTRACKING_STRATEGY -> new BacktrackingStrategy(schedulerConfig, costConfig);
+                default -> new BacktrackingStrategy(schedulerConfig, costConfig);
             };
         }
     }
@@ -348,7 +339,6 @@ public class ScheduleUI extends JFrame {
             Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
             if (column == 0) {
-                // Time column
                 component.setBackground(Color.WHITE);
                 component.setForeground(Color.BLACK);
                 setHorizontalAlignment(SwingConstants.CENTER);

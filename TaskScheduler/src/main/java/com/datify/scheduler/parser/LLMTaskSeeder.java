@@ -120,7 +120,7 @@ public class LLMTaskSeeder {
         return seedHardcodedTasks();
     }
 
-    private static Map<UUID, Task> seedHardcodedTasks() {
+    public static Map<UUID, Task> seedHardcodedTasks() {
         log.debug("Creating seed data from hardcoded fallback...");
 
         Map<UUID, Task> tasks = new HashMap<>();
