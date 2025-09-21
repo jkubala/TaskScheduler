@@ -1,9 +1,12 @@
 package com.datify.scheduler;
 
+import com.datify.scheduler.config.CostConfig;
+import com.datify.scheduler.config.SchedulerConfig;
 import com.datify.scheduler.model.State;
 import com.datify.scheduler.model.Task;
 import com.datify.scheduler.parser.LLMTaskSeeder;
 import com.datify.scheduler.planner.SchedulePlanner;
+import com.datify.scheduler.planner.strategy.AStarStrategy;
 import com.datify.scheduler.ui.ScheduleUI;
 import com.datify.scheduler.util.TaskValidator;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +31,11 @@ public class Main {
                 0
         );
 
+        // Backtracking
         SchedulePlanner schedulePlanner = new SchedulePlanner();
+        // AStar
+        //AStarStrategy aStarStrategy = new AStarStrategy(SchedulerConfig.defaultConfig(), CostConfig.defaultConfig());
+        //schedulePlanner = new SchedulePlanner(aStarStrategy);
         State bestStateFound = schedulePlanner.beginPlanning(startState);
 
         if (bestStateFound == null || bestStateFound.placedTasks().isEmpty()) {
@@ -59,8 +66,8 @@ public class Main {
         log.debug("Creating seed data...");
 
         String input = """
-        I need a 30-minute morning meeting at 8 AM on Monday or Tuesday. 
-        After that, a 60-minute documentation task ideally between 9 AM and 10 AM on Tuesday. 
+        I need a 30-minute morning meeting at 8 AM on Monday or Tuesday.
+        After that, a 60-minute documentation task ideally between 9 AM and 10 AM on Tuesday
         Schedule a 90-minute code review at 10 AM on Wednesday.
         """;
         Map<UUID, Task> tasks = LLMTaskSeeder.seedFromLLM(input);

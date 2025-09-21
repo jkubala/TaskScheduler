@@ -2,7 +2,6 @@ package com.datify.scheduler.ui;
 
 import com.datify.scheduler.model.Placement;
 import com.datify.scheduler.model.State;
-import com.datify.scheduler.model.Task;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -34,7 +33,7 @@ public class ScheduleUI extends JFrame {
 
     private JTable scheduleTable;
     private DefaultTableModel tableModel;
-    private Map<UUID, Color> taskColors;
+    private final Map<UUID, Color> taskColors;
 
     public ScheduleUI() {
         this.taskColors = new HashMap<>();
@@ -116,7 +115,6 @@ public class ScheduleUI extends JFrame {
     }
 
     private void placeTaskInSchedule(Placement placement) {
-        Task task = placement.task();
         int dayColumn = getDayColumn(placement.timeSlot().dayOfWeek());
         if (dayColumn == -1) return;
 

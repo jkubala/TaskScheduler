@@ -10,7 +10,6 @@ import com.datify.scheduler.model.TimeSlot;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
     protected final SchedulerConfig schedulerConfig;

@@ -1,11 +1,14 @@
 package com.datify.scheduler.model;
 
+import lombok.Getter;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Objects;
 
+@Getter
 public class Task {
     private final UUID id;
     private String name;
@@ -23,24 +26,17 @@ public class Task {
         this.idealTimeWindows = List.copyOf(builder.idealTimeWindows);
     }
 
-    public String getName() { return name; }
     public void setName(String name) {
         if (name == null || name.isBlank()) throw new IllegalArgumentException("Name cannot be null or blank");
         this.name = name;
     }
 
-    public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description != null ? description : ""; }
 
-    public Duration getDuration() { return duration; }
     public void setDuration(Duration duration) {
         if (duration == null || duration.isZero() || duration.isNegative()) throw new IllegalArgumentException("Duration must be positive and non-null");
         this.duration = duration;
     }
-
-    public UUID getId() { return id; }
-    public Set<UUID> getDependencyIds() { return dependencyIds; }
-    public List<TimeSlot> getIdealTimeWindows() { return idealTimeWindows; }
 
     @Override
     public String toString() {
