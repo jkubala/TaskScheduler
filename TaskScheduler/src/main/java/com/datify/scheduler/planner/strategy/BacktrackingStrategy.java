@@ -3,7 +3,7 @@ package com.datify.scheduler.planner.strategy;
 import com.datify.scheduler.config.CostConfig;
 import com.datify.scheduler.config.SchedulerConfig;
 import com.datify.scheduler.model.Placement;
-import com.datify.scheduler.model.State;
+import com.datify.scheduler.model.ScheduleState;
 import com.datify.scheduler.model.Task;
 import lombok.extern.slf4j.Slf4j;
 
@@ -12,7 +12,7 @@ import java.util.*;
 @Slf4j
 public class BacktrackingStrategy extends AbstractPlanningStrategy {
 
-    private State bestSolution;
+    private ScheduleState bestSolution;
     private int bestCost;
     private int nodesExplored;
     private long startTime;
@@ -22,8 +22,8 @@ public class BacktrackingStrategy extends AbstractPlanningStrategy {
     }
 
     @Override
-    public State findSchedule(State startState) {
-        if (startState == null) {
+    public ScheduleState findSchedule(ScheduleState startScheduleState) {
+        if (startScheduleState == null) {
             throw new IllegalArgumentException("Start state cannot be null");
         }
 
@@ -32,8 +32,8 @@ public class BacktrackingStrategy extends AbstractPlanningStrategy {
         nodesExplored = 0;
         startTime = System.currentTimeMillis();
 
-        log.info("Starting backtracking search with {} unplaced tasks", startState.unplacedTasks().size());
-        backtrackSearch(startState);
+        log.info("Starting backtracking search with {} unplaced tasks", startScheduleState.unplacedTasks().size());
+        backtrackSearch(startScheduleState);
 
         long elapsed = System.currentTimeMillis() - startTime;
         if (bestSolution != null) {
@@ -41,21 +41,21 @@ public class BacktrackingStrategy extends AbstractPlanningStrategy {
             return bestSolution;
         } else {
             log.warn("No valid solution found after {} nodes in {}ms", nodesExplored, elapsed);
-            return startState;
+            return startScheduleState;
         }
     }
 
-    private boolean backtrackSearch(State currentState) {
+    private boolean backtrackSearch(ScheduleState currentScheduleState) {
         nodesExplored++;
 
         if (limitReached(nodesExplored, startTime)) {
             return bestSolution != null;
         }
 
-        if (currentState.isComplete()) {
-            int cost = currentState.costSoFar();
+        if (currentScheduleState.isComplete()) {
+            int cost = currentScheduleState.costSoFar();
             if (cost < bestCost) {
-                bestSolution = currentState;
+                bestSolution = currentScheduleState;
                 bestCost = cost;
                 log.info("New best solution found: {}", bestCost);
                 return true;
@@ -63,22 +63,22 @@ public class BacktrackingStrategy extends AbstractPlanningStrategy {
             return false;
         }
 
-        if (currentState.totalCostEstimated() >= bestCost) {
+        if (currentScheduleState.totalCostEstimated() >= bestCost) {
             return false;
         }
 
-        Task taskToPlace = selectNextTask(currentState);
+        Task taskToPlace = selectNextTask(currentScheduleState);
         if (taskToPlace == null) {
             return false;
         }
 
-        List<Placement> placements = generatePlacements(taskToPlace, currentState);
+        List<Placement> placements = generatePlacements(taskToPlace, currentScheduleState);
         placements.sort(Comparator.comparingInt(p -> calculatePlacementCost(taskToPlace, p.timeSlot())));
 
         boolean foundAnySolution = false;
         for (Placement placement : placements) {
-            State newState = createStateWithPlacement(currentState, taskToPlace, placement);
-            if (backtrackSearch(newState)) {
+            ScheduleState newScheduleState = createStateWithPlacement(currentScheduleState, taskToPlace, placement);
+            if (backtrackSearch(newScheduleState)) {
                 foundAnySolution = true;
             }
         }
@@ -86,12 +86,12 @@ public class BacktrackingStrategy extends AbstractPlanningStrategy {
         return foundAnySolution;
     }
 
-    private Task selectNextTask(State state) {
+    private Task selectNextTask(ScheduleState scheduleState) {
         Task mostConstrained = null;
         int minSlots = Integer.MAX_VALUE;
 
-        for (Task task : state.unplacedTasks().values()) {
-            int slots = generatePlacements(task, state).size();
+        for (Task task : scheduleState.unplacedTasks().values()) {
+            int slots = generatePlacements(task, scheduleState).size();
             if (slots < minSlots && slots > 0) {
                 minSlots = slots;
                 mostConstrained = task;

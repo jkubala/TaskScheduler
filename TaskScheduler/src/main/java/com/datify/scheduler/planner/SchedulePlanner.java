@@ -2,8 +2,7 @@ package com.datify.scheduler.planner;
 
 import com.datify.scheduler.config.CostConfig;
 import com.datify.scheduler.config.SchedulerConfig;
-import com.datify.scheduler.model.State;
-import com.datify.scheduler.planner.strategy.AStarStrategy;
+import com.datify.scheduler.model.ScheduleState;
 import com.datify.scheduler.planner.strategy.BacktrackingStrategy;
 import com.datify.scheduler.planner.strategy.IPlanningStrategy;
 
@@ -18,10 +17,10 @@ public class SchedulePlanner {
         this.strategy = strategy;
     }
 
-    public State beginPlanning(State startState) {
-        if (startState == null) {
+    public ScheduleState beginPlanning(ScheduleState startScheduleState) {
+        if (startScheduleState == null) {
             throw new IllegalArgumentException("Start state cannot be null");
         }
-        return strategy.findSchedule(startState);
+        return strategy.findSchedule(startScheduleState);
     }
 }

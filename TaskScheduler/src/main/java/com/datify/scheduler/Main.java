@@ -1,12 +1,9 @@
 package com.datify.scheduler;
 
-import com.datify.scheduler.config.CostConfig;
-import com.datify.scheduler.config.SchedulerConfig;
-import com.datify.scheduler.model.State;
+import com.datify.scheduler.model.ScheduleState;
 import com.datify.scheduler.model.Task;
 import com.datify.scheduler.parser.LLMTaskSeeder;
 import com.datify.scheduler.planner.SchedulePlanner;
-import com.datify.scheduler.planner.strategy.AStarStrategy;
 import com.datify.scheduler.ui.ScheduleUI;
 import com.datify.scheduler.util.TaskValidator;
 import lombok.extern.slf4j.Slf4j;
@@ -24,37 +21,44 @@ public class Main {
             return;
         }
         log.info("Seeded {} tasks", validTasks.size());
-        State startState = new State(
+
+        ScheduleState startScheduleState = new ScheduleState(
                 new HashMap<>(),
                 new HashMap<>(validTasks),
                 0,
                 0
         );
 
-        // Backtracking
+        // Default to Backtracking strategy for initial computation
         SchedulePlanner schedulePlanner = new SchedulePlanner();
-        // AStar
-        //AStarStrategy aStarStrategy = new AStarStrategy(SchedulerConfig.defaultConfig(), CostConfig.defaultConfig());
-        //schedulePlanner = new SchedulePlanner(aStarStrategy);
-        State bestStateFound = schedulePlanner.beginPlanning(startState);
+        ScheduleState bestScheduleStateFound = schedulePlanner.beginPlanning(startScheduleState);
 
-        if (bestStateFound == null || bestStateFound.placedTasks().isEmpty()) {
-            log.warn("No valid schedule found");
-            return;
+        if (bestScheduleStateFound == null || bestScheduleStateFound.placedTasks().isEmpty()) {
+            log.warn("No valid schedule found with default strategy");
         } else {
-            log.info("Successfully created schedule with {} tasks",
-                    bestStateFound.placedTasks().size());
+            log.info("Successfully created initial schedule with {} tasks",
+                    bestScheduleStateFound.placedTasks().size());
         }
 
-        // Display UI (made with Claude)
+        // Display UI with strategy selection capability
         SwingUtilities.invokeLater(() -> {
             log.info("Creating UI on EDT...");
             try {
                 ScheduleUI ui = new ScheduleUI();
                 ui.setVisible(true);
                 log.info("UI window created and set visible");
-                ui.displaySchedule(bestStateFound);
-                log.info("Schedule data loaded into UI");
+
+                // Set initial data for recomputation functionality
+                ui.setInitialData(startScheduleState, validTasks);
+
+                // Display initial schedule (even if empty)
+                if (bestScheduleStateFound != null) {
+                    ui.displaySchedule(bestScheduleStateFound);
+                    log.info("Initial schedule data loaded into UI");
+                } else {
+                    ui.displaySchedule(startScheduleState); // Display empty schedule
+                    log.info("Empty schedule displayed - use recompute to try different strategies");
+                }
             } catch (Exception e) {
                 log.error("Error creating UI: " + e.getMessage());
                 e.printStackTrace();

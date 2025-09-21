@@ -3,7 +3,7 @@ package com.datify.scheduler.planner.strategy;
 import com.datify.scheduler.config.CostConfig;
 import com.datify.scheduler.config.SchedulerConfig;
 import com.datify.scheduler.model.Placement;
-import com.datify.scheduler.model.State;
+import com.datify.scheduler.model.ScheduleState;
 import com.datify.scheduler.model.Task;
 import lombok.extern.slf4j.Slf4j;
 
@@ -18,19 +18,19 @@ public class AStarStrategy extends AbstractPlanningStrategy {
     }
 
     @Override
-    public State findSchedule(State startState) {
-        if (startState == null) {
+    public ScheduleState findSchedule(ScheduleState startScheduleState) {
+        if (startScheduleState == null) {
             throw new IllegalArgumentException("Start state cannot be null");
         }
 
-        PriorityQueue<State> frontier = new PriorityQueue<>(Comparator.comparingInt(State::totalCostEstimated));
-        frontier.add(startState);
-        State bestSolution = null;
+        PriorityQueue<ScheduleState> frontier = new PriorityQueue<>(Comparator.comparingInt(ScheduleState::totalCostEstimated));
+        frontier.add(startScheduleState);
+        ScheduleState bestSolution = null;
         int nodesExplored = 0;
         long startTime = System.currentTimeMillis();
 
         while (!frontier.isEmpty()) {
-            State current = frontier.poll();
+            ScheduleState current = frontier.poll();
             nodesExplored++;
 
             if (current.isComplete()) {
@@ -47,13 +47,13 @@ public class AStarStrategy extends AbstractPlanningStrategy {
 
             for (Task task : current.unplacedTasks().values()) {
                 for (Placement placement : generatePlacements(task, current)) {
-                    State next = createStateWithPlacement(current, task, placement);
+                    ScheduleState next = createStateWithPlacement(current, task, placement);
                     frontier.add(next);
                 }
             }
         }
 
         log.info("A* search explored {} nodes", nodesExplored);
-        return bestSolution != null ? bestSolution : startState;
+        return bestSolution != null ? bestSolution : startScheduleState;
     }
 }

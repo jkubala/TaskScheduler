@@ -3,7 +3,7 @@ package com.datify.scheduler.planner.strategy;
 import com.datify.scheduler.config.CostConfig;
 import com.datify.scheduler.config.SchedulerConfig;
 import com.datify.scheduler.model.Placement;
-import com.datify.scheduler.model.State;
+import com.datify.scheduler.model.ScheduleState;
 import com.datify.scheduler.model.Task;
 import com.datify.scheduler.model.TimeSlot;
 
@@ -20,10 +20,10 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
         this.costConfig = costConfig;
     }
 
-    protected List<Placement> generatePlacements(Task task, State state) {
+    protected List<Placement> generatePlacements(Task task, ScheduleState scheduleState) {
         List<Placement> placements = new ArrayList<>();
 
-        if (!state.dependenciesPlaced(task)) {
+        if (!scheduleState.dependenciesPlaced(task)) {
             return Collections.emptyList();
         }
 
@@ -35,7 +35,7 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
 
                 TimeSlot ts = new TimeSlot(slot, end, day);
 
-                if (state.canPlaceTask(task, ts)) {
+                if (scheduleState.canPlaceTask(task, ts)) {
                     placements.add(new Placement(task, ts));
                 }
 
@@ -58,7 +58,7 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
         return cost;
     }
 
-    protected State createStateWithPlacement(State current, Task task, Placement placement) {
+    protected ScheduleState createStateWithPlacement(ScheduleState current, Task task, Placement placement) {
         Map<UUID, Placement> newPlaced = new HashMap<>(current.placedTasks());
         newPlaced.put(task.getId(), placement);
 
@@ -68,17 +68,17 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
         int newCost = current.costSoFar() + calculatePlacementCost(task, placement.timeSlot());
         int totalCostEstimated = newCost + estimateRemainingCost(current, newUnplaced);
 
-        return new State(newPlaced, newUnplaced, newCost, totalCostEstimated);
+        return new ScheduleState(newPlaced, newUnplaced, newCost, totalCostEstimated);
     }
 
-    protected int estimateRemainingCost(State currentState, Map<UUID, Task> unplacedTasks) {
+    protected int estimateRemainingCost(ScheduleState currentScheduleState, Map<UUID, Task> unplacedTasks) {
         int baseCost = unplacedTasks.size() * costConfig.taskPlacementCost();
         int potentialPenalty = 0;
 
         for (Task task : unplacedTasks.values()) {
             if (!task.getIdealTimeWindows().isEmpty()) {
                 boolean hasAvailableIdeal = task.getIdealTimeWindows().stream()
-                        .anyMatch(ideal -> currentState.canPlaceTask(task, ideal));
+                        .anyMatch(ideal -> currentScheduleState.canPlaceTask(task, ideal));
                 if (!hasAvailableIdeal) {
                     potentialPenalty += costConfig.idealTimeslotMissPenalty();
                 }
@@ -89,7 +89,7 @@ public abstract class AbstractPlanningStrategy implements IPlanningStrategy {
     }
 
     @Override
-    public abstract State findSchedule(State startState);
+    public abstract ScheduleState findSchedule(ScheduleState startScheduleState);
 
     protected boolean limitReached(int nodesExplored, long startTime) {
         return nodesExplored > schedulerConfig.maxNodes() ||

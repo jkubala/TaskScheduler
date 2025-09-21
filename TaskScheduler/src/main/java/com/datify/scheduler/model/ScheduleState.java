@@ -3,7 +3,7 @@ package com.datify.scheduler.model;
 import java.util.Map;
 import java.util.UUID;
 
-public record State(
+public record ScheduleState(
         Map<UUID, Placement> placedTasks,
         Map<UUID, Task> unplacedTasks,
         int costSoFar,
